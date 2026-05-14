@@ -136,6 +136,41 @@ def gerar_palpite():
 
     return jsonify({"erro": "Limite de tentativas atingido. Tente novamente."})
 
+@app.route('/dados-iniciais')
+def dados_iniciais():
+    historico, todas_dezenas = processar_dados()
+    
+    if historico is None:
+        return jsonify({"erro": "Erro ao carregar dados."})
+
+    # Lendo a planilha novamente para pegar os detalhes dos últimos concursos
+    arquivos = [f for f in os.listdir(DIRETORIO_PLANILHA) if f.endswith('.xlsx')]
+    arquivos.sort(key=lambda x: os.path.getmtime(os.path.join(DIRETORIO_PLANILHA, x)), reverse=True)
+    df = pd.read_excel(os.path.join(DIRETORIO_PLANILHA, arquivos[0]))
+    
+    # Pegamos os 3 últimos registros válidos
+    ultimos_3 = df.dropna(subset=[df.columns[2]]).tail(3)
+    
+    lista_ultimos = []
+    ultimo_concurso_num = 0
+
+    for _, linha in ultimos_3.iterrows():
+        concurso = str(linha.iloc[0]) # Coluna A
+        dezenas = [str(int(n)).zfill(2) for n in linha.iloc[2:8]] # Colunas C a H
+        lista_ultimos.append({
+            "concurso": concurso,
+            "dezenas": dezenas
+        })
+        ultimo_concurso_num = int(linha.iloc[0])
+
+    # O próximo concurso é o último + 1
+    proximo_concurso = ultimo_concurso_num + 1
+
+    return jsonify({
+        "ultimos_jogos": lista_ultimos[::-1], # Inverte para mostrar o mais recente primeiro
+        "proximo_concurso": proximo_concurso
+    })
+
 if __name__ == "__main__":
     # Configuração para rodar tanto local quanto no Render
     port = int(os.environ.get("PORT", 5000))
