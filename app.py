@@ -16,48 +16,44 @@ from webdriver_manager.chrome import ChromeDriverManager
 app = Flask(__name__)
 
 # --- CONFIGURAÇÕES DE CAMINHO ---
-# DIRETORIO_PLANILHA = r"C:\Users\vitor.souza\Documents\PASTA-MEGA-SENA\PLANILHA"
-
-DIRETORIO_PLANILHA = os.path.join(os.getcwd(), "PLANILHA")
+# Define o diretório baseado na localização do arquivo app.py (funciona no Git e Local)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DIRETORIO_PLANILHA = os.path.join(BASE_DIR, "PLANILHA")
 URL_CAIXA = "https://loterias.caixa.gov.br/Paginas/Mega-Sena.aspx"
 
 if not os.path.exists(DIRETORIO_PLANILHA):
     os.makedirs(DIRETORIO_PLANILHA)
 
 # --- FUNÇÃO DE CAPTURA (HEADLESS) ---
-# def baixar_planilha_caixa():
-#     chrome_options = Options()
-#     chrome_options.add_argument("--headless=new")
-#     chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
-    
-#     prefs = {"download.default_directory": DIRETORIO_PLANILHA, "download.prompt_for_download": False}
-#     chrome_options.add_experimental_option("prefs", prefs)
-    
-#     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
-#     driver.execute_cdp_cmd("Page.setDownloadBehavior", {"behavior": "allow", "downloadPath": DIRETORIO_PLANILHA})
-
-    def baixar_planilha_caixa():
+def baixar_planilha_caixa():
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
     
-    # INDICA O CAMINHO DO CHROME INSTALADO PELO RENDER-BUILD.SH
-    chrome_options.binary_location = "/opt/render/project/.render/chrome/opt/google/chrome/google-chrome"
+    # Se estiver rodando no Render, precisamos apontar para o binário do Chrome instalado pelo build script
+    if os.path.exists("/opt/render/project/.render/chrome/opt/google/chrome/google-chrome"):
+        chrome_options.binary_location = "/opt/render/project/.render/chrome/opt/google/chrome/google-chrome"
     
-    prefs = {"download.default_directory": DIRETORIO_PLANILHA, "download.prompt_for_download": False}
+    prefs = {
+        "download.default_directory": DIRETORIO_PLANILHA, 
+        "download.prompt_for_download": False,
+        "directory_upgrade": True
+    }
     chrome_options.add_experimental_option("prefs", prefs)
     
-    # Usa o driver gerenciado automaticamente, mas com as opções acima
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=chrome_options)
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+    driver.execute_cdp_cmd("Page.setDownloadBehavior", {"behavior": "allow", "downloadPath": DIRETORIO_PLANILHA})
 
     try:
+        print("🔗 Acessando site da Caixa...")
         driver.get(URL_CAIXA)
         wait = WebDriverWait(driver, 30)
         botao = wait.until(EC.presence_of_element_located((By.ID, "btnResultados")))
         driver.execute_script("arguments[0].click();", botao)
+        print("⏳ Aguardando download...")
         time.sleep(15) 
     finally:
         driver.quit()
@@ -65,10 +61,17 @@ if not os.path.exists(DIRETORIO_PLANILHA):
 # --- LÓGICA DE PROCESSAMENTO ---
 def processar_dados():
     arquivos = [f for f in os.listdir(DIRETORIO_PLANILHA) if f.endswith('.xlsx')]
+    
+    # Se não houver arquivos, tenta baixar (Plano B)
     if not arquivos:
+        print("⚠️ Planilha não encontrada. Iniciando download automático...")
         baixar_planilha_caixa()
         arquivos = [f for f in os.listdir(DIRETORIO_PLANILHA) if f.endswith('.xlsx')]
 
+    if not arquivos:
+        return None, None
+
+    # Pega o arquivo mais recente na pasta
     arquivos.sort(key=lambda x: os.path.getmtime(os.path.join(DIRETORIO_PLANILHA, x)), reverse=True)
     caminho_excel = os.path.join(DIRETORIO_PLANILHA, arquivos[0])
     
@@ -88,17 +91,17 @@ def processar_dados():
 
 @app.route('/')
 def index():
-    # Carrega a página inicial (o HTML que te enviei antes)
     return render_template('index.html')
 
 @app.route('/gerar')
 def gerar_palpite():
-    # RN01 e RN02: Recebe a quantidade escolhida no ComboBox
     qtd = int(request.args.get('qtd', 6))
     
     historico, todas_dezenas = processar_dados()
     
-    # Estatística básica (Top 15 mais frequentes)
+    if historico is None:
+        return jsonify({"erro": "Erro ao processar dados da Mega-Sena."})
+    
     frequencia = Counter(todas_dezenas)
     df_freq = pd.DataFrame(frequencia.items(), columns=['Dezena', 'Freq']).sort_values(by='Freq', ascending=False)
     
@@ -107,7 +110,7 @@ def gerar_palpite():
     pool_misto = list(range(1, 61))
 
     # RN03: Lógica do Robô para gerar o jogo inédito
-    random.seed(time.time()) # Seed dinâmica para o site não repetir o jogo para usuários diferentes
+    random.seed(time.time())
     
     tentativas = 0
     while tentativas < 1000:
@@ -122,7 +125,7 @@ def gerar_palpite():
         else:
             jogo = sorted(random.sample(pool_misto, 6))
 
-        # Verifica ineditismo (combinação de 6 números)
+        # Verifica se o jogo (ou qualquer combinação de 6 dentro dele) já existiu
         comb_6 = list(combinations(jogo, 6))
         is_repetido = any(tuple(sorted(c)) in historico for c in comb_6)
         
@@ -131,7 +134,9 @@ def gerar_palpite():
         
         tentativas += 1
 
-    return jsonify({"erro": "Não foi possível gerar um jogo inédito. Tente novamente."})
+    return jsonify({"erro": "Limite de tentativas atingido. Tente novamente."})
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    # Configuração para rodar tanto local quanto no Render
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
