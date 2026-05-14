@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador Jogos Mega-Sena</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🍀 Gerador Mega-Sena</h1>
+            <p>Robô de Análise Estatística Integrado</p>
+        </header>
+
+        <main class="card">
+            <section class="config">
+                <label for="qtd_numeros">Escolha a modalidade de jogo:</label>
+                <select id="qtd_numeros" name="qtd_numeros">
+                    <option value="6">Aposta Simples (6 números)</option>
+                    <option value="7">Jogo Especial (7 números)</option>
+                    <option value="8">Jogo Especial (8 números)</option>
+                    <option value="9">Jogo Estratégico (9 números)</option>
+                    <option value="10">Jogo Estratégico (10 números)</option>
+                </select>
+
+                <button id="btnGerar" onclick="gerarJogo()">GERAR PALPITE</button>
+            </section>
+
+            <section class="resultado-area">
+                <div id="loading" class="hidden">Analisando histórico...</div>
+                <div id="numeros-container" class="numeros-grid">
+                    </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>&copy; 2024 Vitor Hugo - Omini 3D | Dados atualizados via Robô Python</p>
+        </footer>
+    </div>
+
+    <script>
+        function gerarJogo() {
+            const qtd = document.getElementById('qtd_numeros').value;
+            const container = document.getElementById('numeros-container');
+            const loading = document.getElementById('loading');
+
+            container.innerHTML = '';
+            loading.classList.remove('hidden');
+
+            // RN03: Chamada para o seu robô Python (API)
+            fetch(`/gerar?qtd=${qtd}`)
+                .then(response => response.json())
+                .then(data => {
+                    loading.classList.add('hidden');
+                    data.jogo.forEach((num, index) => {
+                        setTimeout(() => {
+                            const bola = document.createElement('div');
+                            bola.className = 'bola';
+                            bola.innerText = num < 10 ? '0' + num : num;
+                            container.appendChild(bola);
+                        }, index * 100);
+                    });
+                })
+                .catch(err => {
+                    loading.innerText = "Erro ao conectar com o Robô.";
+                });
+        }
+    </script>
+</body>
+</html>
