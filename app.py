@@ -25,16 +25,33 @@ if not os.path.exists(DIRETORIO_PLANILHA):
     os.makedirs(DIRETORIO_PLANILHA)
 
 # --- FUNÇÃO DE CAPTURA (HEADLESS) ---
-def baixar_planilha_caixa():
+# def baixar_planilha_caixa():
+#     chrome_options = Options()
+#     chrome_options.add_argument("--headless=new")
+#     chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
+    
+#     prefs = {"download.default_directory": DIRETORIO_PLANILHA, "download.prompt_for_download": False}
+#     chrome_options.add_experimental_option("prefs", prefs)
+    
+#     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+#     driver.execute_cdp_cmd("Page.setDownloadBehavior", {"behavior": "allow", "downloadPath": DIRETORIO_PLANILHA})
+
+    def baixar_planilha_caixa():
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
-    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    
+    # INDICA O CAMINHO DO CHROME INSTALADO PELO RENDER-BUILD.SH
+    chrome_options.binary_location = "/opt/render/project/.render/chrome/opt/google/chrome/google-chrome"
     
     prefs = {"download.default_directory": DIRETORIO_PLANILHA, "download.prompt_for_download": False}
     chrome_options.add_experimental_option("prefs", prefs)
     
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
-    driver.execute_cdp_cmd("Page.setDownloadBehavior", {"behavior": "allow", "downloadPath": DIRETORIO_PLANILHA})
+    # Usa o driver gerenciado automaticamente, mas com as opções acima
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=chrome_options)
 
     try:
         driver.get(URL_CAIXA)
